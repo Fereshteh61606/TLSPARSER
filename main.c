@@ -61,24 +61,25 @@ typedef struct Handshake_Header
 } Handshake_Header;
 
 // typedef struct ClientHello
-typedef struct TLSPrameters
+typedef struct TLS_Prameters
 {
 
-    uint16_t len;
+    uint16_t SNI_len;
+    u_int16_t common_name_len;
     char SNI[MAX_len];         //(Server Name Indication =SNI
     char common_name[MAX_len]; // Common name
     bool state;
-} TLSPrameters;
+} TLS_Prameters;
 
 //================================================================================================
 
-uint16_t parse_record_header(uint8_t *payload, uint16_t payload_len, Record_Header *record_header, uint16_t offset, TLSPrameters *mypram)
+uint16_t parse_record_header(uint8_t *payload, uint16_t payload_len, Record_Header *record_header, uint16_t offset, TLS_Prameters *tls_prameters)
 {
     if (payload_len > offset + 4)
     {
 
         // header start
-        mypram->state = 1;
+        tls_prameters->state = 1;
         // Extract Type
         record_header->Content_Type = payload[offset];
 
@@ -94,18 +95,18 @@ uint16_t parse_record_header(uint8_t *payload, uint16_t payload_len, Record_Head
 
     else
     {
-        mypram->state = 0;
+        tls_prameters->state = 0;
         return 0;
     }
 }
 
 //================================================================================================
 
-uint16_t parse_handshke_header(uint8_t *payload, uint16_t payload_len, Handshake_Header *handshake_header, uint16_t offset, TLSPrameters *mypram)
+uint16_t parse_handshke_header(uint8_t *payload, uint16_t payload_len, Handshake_Header *handshake_header, uint16_t offset, TLS_Prameters *tls_prameters)
 {
     if (payload_len > offset + 4)
     {
-        mypram->state = 1;
+        tls_prameters->state = 1;
         // header start
 
         // Extract Type
@@ -120,32 +121,32 @@ uint16_t parse_handshke_header(uint8_t *payload, uint16_t payload_len, Handshake
 
     else
     {
-        mypram->state = 0;
+        tls_prameters->state = 0;
         return 0;
     }
 }
 
 //=================================================================================================================
-uint16_t parse_client_hello(uint8_t *payload, uint16_t offset, uint16_t payload_len, TLSPrameters *mypram)
+uint16_t parse_client_hello(uint8_t *payload, uint16_t offset, uint16_t payload_len, TLS_Prameters *tls_prameters)
 {
     offset += 2 + 32; // Version 2 B +random 32 B
 
     if (payload_len > offset + 1)
     {
-        mypram->state = 1;
+        tls_prameters->state = 1;
 
         uint16_t ID_length = payload[offset + 1];
         offset += ID_length + 1; // 1B Idlen
     }
     else
     {
-        mypram->state = 0;
+        tls_prameters->state = 0;
         return 0;
     }
 
     if (payload_len > offset + 2)
     {
-        mypram->state = 1;
+        tls_prameters->state = 1;
         while (!((payload[offset + 1] == 0) && (payload[offset + 2] == 0)))
         {
             offset += 2;
@@ -153,84 +154,82 @@ uint16_t parse_client_hello(uint8_t *payload, uint16_t offset, uint16_t payload_
     }
     else
     {
-        mypram->state = 0;
+        tls_prameters->state = 0;
         return 0;
     }
 
-    uint16_t SNI_length = ((payload_len > offset + 9) ? (payload[offset + 8] << 8) | payload[offset + 9] : 0); //  00 00 assigned value for extension "server name" , +
-                                                                                                               // 2B extention data len+ 2B len of first (and only) list entry follows + 1B entry Type
+    tls_prameters->SNI_len = ((payload_len > offset + 9) ? (payload[offset + 8] << 8) | payload[offset + 9] : 0); //  00 00 assigned value for extension "server name" , +
+                                                                                                                  // 2B extention data len+ 2B len of first (and only) list entry follows + 1B entry Type
     offset += 9;
-    if (payload_len > offset + SNI_length)
+    if (payload_len > offset + tls_prameters->SNI_len)
     {
 
         offset++;
-        memcpy(mypram->SNI, payload + offset , SNI_length);
+        memcpy(tls_prameters->SNI, payload + offset, tls_prameters->SNI_len);
 
-        offset += SNI_length;
-        mypram->len = SNI_length;
+        offset += tls_prameters->SNI_len;
 
         return offset;
     }
     else
     {
-        mypram->state = 0;
+        tls_prameters->state = 0;
         return 0;
     }
 }
 //=====================================================================================================================
-void find_common_name(uint8_t *payload, uint16_t offset, uint16_t payload_len, TLSPrameters *mypram)
+void find_common_name(uint8_t *payload, uint16_t offset, uint16_t payload_len, TLS_Prameters *tls_prameters)
 {
-    uint16_t common_len;
 
     if (payload_len > offset + 5)
     {
-        mypram->state = 1;
+        tls_prameters->state = 1;
         while (!((payload[offset + 1] == 0x55) && (payload[offset + 2] == 0x04) && (payload[offset + 3] == 0x03)))
         {
             offset += 3;
         }
 
-        common_len = payload[offset + 5];
+        tls_prameters->common_name_len = payload[offset + 5];
     }
     else
 
     {
-        mypram->state = 0;
+        tls_prameters->state = 0;
         return;
     }
 
     offset += 5;
-    if (payload_len > offset + common_len)
+    if (payload_len > offset + tls_prameters->common_name_len)
     {
-        mypram->state = 1;
-        memcpy(mypram->common_name, payload + offset + 1, common_len);
-        offset += common_len;
-        mypram->len = common_len;
+        tls_prameters->state = 1;
+        offset++;
+        memcpy(tls_prameters->common_name, payload + offset, tls_prameters->common_name_len);
+        offset += tls_prameters->common_name_len;
+
         return;
     }
     else
 
     {
-        mypram->state = 0;
+        tls_prameters->state = 0;
         return;
     }
 }
 
 //================================================================================================================================
-bool parse_tls_data(uint8_t *payload, uint16_t payload_len, Handshake_Header *handshake_header, uint16_t offset, TLSPrameters *mypram)
+bool parse_tls_data(uint8_t *payload, uint16_t payload_len, Handshake_Header *handshake_header, uint16_t offset, TLS_Prameters *tls_prameters)
 {
 
     switch (handshake_header->type)
     {
         // Extensions Length
     case HANDSHAKE_TYPE_CLIENT_HELLO:
-        offset = parse_client_hello(payload, offset, payload_len, mypram);
+        offset = parse_client_hello(payload, offset, payload_len, tls_prameters);
         return 1;
- 
- 
+
     case HANDSHAKE_TYPE_SERVER_HELLO:
     case HANDSHAKE_TYPE_CERTIFICATE:
-        find_common_name(payload, offset, payload_len, mypram);
+        find_common_name(payload, offset, payload_len, tls_prameters);
         return 1;
     default:
         return 0;
@@ -238,7 +237,7 @@ bool parse_tls_data(uint8_t *payload, uint16_t payload_len, Handshake_Header *ha
 }
 
 //===========================================================================================================
-void parse_TLS(uint8_t *payload, uint16_t offset, uint16_t payload_len, Record_Header *record_header, Handshake_Header *handshake_header, TLSPrameters *mypram)
+void parse_TLS(uint8_t *payload, uint16_t offset, uint16_t payload_len, Record_Header *record_header, Handshake_Header *handshake_header, TLS_Prameters *tls_prameters)
 {
 
     uint16_t indx = 0;
@@ -246,11 +245,12 @@ void parse_TLS(uint8_t *payload, uint16_t offset, uint16_t payload_len, Record_H
     while (indx < payload_len)
     {
 
-        offset = parse_record_header(payload, payload_len, record_header, offset, mypram);
-        offset = parse_handshke_header(payload, payload_len, handshake_header, offset, mypram);
-        continue_parsing = parse_tls_data(payload, payload_len, handshake_header, offset, mypram);
-        if (continue_parsing)  return;
-           
+        offset = parse_record_header(payload, payload_len, record_header, offset, tls_prameters);
+        offset = parse_handshke_header(payload, payload_len, handshake_header, offset, tls_prameters);
+        continue_parsing = parse_tls_data(payload, payload_len, handshake_header, offset, tls_prameters);
+        if (continue_parsing)
+            return;
+
         if (payload_len > record_header->Length)
         {
             indx += record_header->Length;
@@ -779,8 +779,8 @@ int main()
     uint16_t offset = 0;
     Record_Header Record_Header;
     Handshake_Header handshake_header;
-    TLSPrameters mypram;
-    parse_TLS(payload, offset, payload_len, &Record_Header, &handshake_header, &mypram);
+    TLS_Prameters tls_prameters;
+    parse_TLS(payload, offset, payload_len, &Record_Header, &handshake_header, &tls_prameters);
 
     return 0;
 }
