@@ -58,6 +58,17 @@
   "C_Cpp_Runner.msvcSecureNoWarnings": false,
   "files.associations": {
     "in.h": "c",
-    "random": "c"
-  }
+    "random": "c",
+    "memory.h": "c",
+    "pcap.h": "c",
+    "packet.h": "c",
+    "stddef.h": "c"
+  },
+  "makefile.launchConfigurations": [
+    {
+      "cwd": "/home/saafta/TLSPARSER/bin",
+      "binaryPath": "/home/saafta/TLSPARSER/bin/dns_packet_parser",
+      "binaryArgs": []
+    }
+  ]
 }
